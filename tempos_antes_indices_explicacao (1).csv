@@ -1,0 +1,781 @@
+
+ANALISE ANTES DOS INDICES 
+
+Interrogação 1:
+
+QUERY PLAN
+Sort  (cost=2733.77..2754.44 rows=8268 width=77) (actual time=60.143..60.702 rows=8268 loops=1)
+  Sort Key: recurso.titulo
+  Sort Method: quicksort  Memory: 977kB
+  ->  Hash Join  (cost=1337.80..2195.80 rows=8268 width=77) (actual time=12.625..26.167 rows=8268 loops=1)
+        Hash Cond: (recurso.id_autor = autor.id_autor)
+        ->  Hash Left Join  (cost=614.55..1430.18 rows=8268 width=29) (actual time=5.037..14.223 rows=8268 loops=1)
+              Hash Cond: (recurso.id_recurso = periodico.id_recurso)
+              ->  Hash Left Join  (cost=415.95..1209.88 rows=8268 width=29) (actual time=3.358..10.814 rows=8268 loops=1)
+                    Hash Cond: (recurso.id_recurso = ebook.id_recurso)
+                    ->  Hash Left Join  (cost=210.36..982.59 rows=8268 width=25) (actual time=1.727..7.420 rows=8268 loops=1)
+                          Hash Cond: (recurso.id_recurso = livro.id_recurso)
+                          ->  Seq Scan on recurso  (cost=0.00..750.52 rows=8268 width=21) (actual time=0.005..3.666 rows=8268 loops=1)
+                                Filter: ((disponibilidade)::text = 'dispon�vel'::text)
+                                Rows Removed by Filter: 11934
+                          ->  Hash  (cost=125.16..125.16 rows=6816 width=4) (actual time=1.705..1.706 rows=6816 loops=1)
+                                Buckets: 8192  Batches: 1  Memory Usage: 304kB
+                                ->  Seq Scan on livro  (cost=0.00..125.16 rows=6816 width=4) (actual time=0.004..0.820 rows=6816 loops=1)
+                    ->  Hash  (cost=121.93..121.93 rows=6693 width=4) (actual time=1.617..1.617 rows=6693 loops=1)
+                          Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                          ->  Seq Scan on ebook  (cost=0.00..121.93 rows=6693 width=4) (actual time=0.004..0.764 rows=6693 loops=1)
+              ->  Hash  (cost=114.93..114.93 rows=6693 width=4) (actual time=1.663..1.664 rows=6693 loops=1)
+                    Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                    ->  Seq Scan on periodico  (cost=0.00..114.93 rows=6693 width=4) (actual time=0.003..0.789 rows=6693 loops=1)
+        ->  Hash  (cost=472.00..472.00 rows=20100 width=28) (actual time=7.539..7.539 rows=20100 loops=1)
+              Buckets: 32768  Batches: 1  Memory Usage: 1473kB
+              ->  Seq Scan on autor  (cost=0.00..472.00 rows=20100 width=28) (actual time=0.007..3.603 rows=20100 loops=1)
+Planning Time: 0.624 ms
+Execution Time: 61.225 ms
+
+ENGARRAFAMENTOS QUERY 1:
+--Seq Scan completo na tabela Recurso; 
+--Sort custoso em titulo; 
+--LEFT JOIN com Livro, EBook e Periodico sem índices seletivos; 
+--JOIN com Autor com hash scan completo
+
+
+
+Interrogação 2:
+
+QUERY PLAN
+HashAggregate  (cost=831.06..834.26 rows=320 width=226) (actual time=7.216..7.226 rows=42 loops=1)
+  Group Key: categoria.nome_categoria
+  Batches: 1  Memory Usage: 37kB
+  ->  Hash Join  (cost=17.20..789.72 rows=8268 width=222) (actual time=0.042..5.339 rows=8268 loops=1)
+        Hash Cond: (recurso.id_categoria = categoria.id_categoria)
+        ->  Seq Scan on recurso  (cost=0.00..750.52 rows=8268 width=8) (actual time=0.009..3.407 rows=8268 loops=1)
+              Filter: ((disponibilidade)::text = 'dispon�vel'::text)
+              Rows Removed by Filter: 11934
+        ->  Hash  (cost=13.20..13.20 rows=320 width=222) (actual time=0.025..0.025 rows=43 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 11kB
+              ->  Seq Scan on categoria  (cost=0.00..13.20 rows=320 width=222) (actual time=0.005..0.013 rows=43 loops=1)
+Planning Time: 0.132 ms
+Execution Time: 7.265 ms
+
+Engarrafamentos QUERY 2:
+--Seq Scan completo na tabela Recurso para filtrar disponibilidade = 'disponível' (11934 linhas removidas); 
+--JOIN com Categoria sem filtro seletivo, exigindo hash join; 
+--HashAggregate necessário para agrupar por categoria.
+
+
+
+Interrogação 3:
+
+QUERY PLAN
+Sort  (cost=3815.07..3865.57 rows=20202 width=21) (actual time=43.246..44.430 rows=20202 loops=1)
+  Sort Key: (count(emprestimo.id_emprestimo)) DESC
+  Sort Method: quicksort  Memory: 1719kB
+  ->  HashAggregate  (cost=2168.38..2370.40 rows=20202 width=21) (actual time=34.580..38.098 rows=20202 loops=1)
+        Group Key: recurso.titulo
+        Batches: 1  Memory Usage: 2065kB
+        ->  Hash Join  (cost=952.54..1965.88 rows=40500 width=17) (actual time=6.879..22.243 rows=40500 loops=1)
+              Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+              ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.006..3.600 rows=40500 loops=1)
+              ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=6.827..6.828 rows=20202 loops=1)
+                    Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                    ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.004..3.401 rows=20202 loops=1)
+Planning Time: 0.212 ms
+Execution Time: 45.562 ms
+
+Engarrafamentos QUERY 3:
+--Seq Scan completo nas tabelas envolvidas devido à ausência de filtros seletivos; 
+--Hash Join necessário para combinar as tabelas; 
+--Hash Aggregate para calcular agregações; 
+--Sort final para ordenação;
+--Índices adicionais não reduzirão significativamente o tempo;
+
+
+
+
+Interrogação 4:
+
+QUERY PLAN
+Nested Loop  (cost=298.75..1646.85 rows=4062 width=43) (actual time=2.494..13.944 rows=4062 loops=1)
+  ->  Hash Join  (cost=298.45..1448.57 rows=4062 width=15) (actual time=2.476..11.410 rows=4062 loops=1)
+        Hash Cond: (emprestimo.id_emprestimo = multa.id_emprestimo)
+        ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.006..3.372 rows=40500 loops=1)
+        ->  Hash  (cost=247.68..247.68 rows=4062 width=15) (actual time=2.367..2.368 rows=4062 loops=1)
+              Buckets: 4096  Batches: 1  Memory Usage: 223kB
+              ->  Seq Scan on multa  (cost=0.00..247.68 rows=4062 width=15) (actual time=0.011..1.615 rows=4062 loops=1)
+                    Filter: ((estado_multa)::text = 'pendente'::text)
+                    Rows Removed by Filter: 8392
+  ->  Memoize  (cost=0.30..0.41 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=4062)
+        Cache Key: emprestimo.id_utilizador
+        Cache Mode: logical
+        Hits: 4030  Misses: 32  Evictions: 0  Overflows: 0  Memory Usage: 4kB
+        ->  Index Scan using utilizador_pkey on utilizador  (cost=0.29..0.40 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=32)
+              Index Cond: (id_utilizador = emprestimo.id_utilizador)
+Planning Time: 0.327 ms
+Execution Time: 14.148 ms
+
+ENGARRFAMENTOS QUERY 4:
+--Seq Scan em emprestimo; 
+--Seq Scan em multa com filtro estado_multa='pendente'; 
+--Hash Join entre emprestimo e multa; 
+--Nested Loop com Memoize
+--Índice parcial em multa (estado_multa='pendente') poderia reduzir custos.
+
+
+
+
+Interrogação 5:
+
+QUERY PLAN
+WindowAgg  (cost=2166.75..2356.25 rows=9475 width=64) (actual time=10.182..10.200 rows=19 loops=1)
+  ->  Sort  (cost=2166.75..2190.44 rows=9475 width=24) (actual time=10.171..10.173 rows=19 loops=1)
+        Sort Key: (count(*)) DESC
+        Sort Method: quicksort  Memory: 26kB
+        ->  HashAggregate  (cost=1446.18..1540.93 rows=9475 width=24) (actual time=10.110..10.162 rows=19 loops=1)
+              Group Key: utilizador.id_utilizador
+              Batches: 1  Memory Usage: 409kB
+              ->  Nested Loop  (cost=0.30..1398.80 rows=9475 width=16) (actual time=0.027..8.652 rows=8373 loops=1)
+                    ->  Seq Scan on emprestimo  (cost=0.00..1008.25 rows=9475 width=4) (actual time=0.014..5.052 rows=8373 loops=1)
+                          Filter: ((data_devolucao_efetiva IS NOT NULL) AND (data_devolucao_efetiva > data_devolucao_prevista))
+                          Rows Removed by Filter: 32127
+                    ->  Memoize  (cost=0.30..0.72 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=8373)
+                          Cache Key: emprestimo.id_utilizador
+                          Cache Mode: logical
+                          Hits: 8354  Misses: 19  Evictions: 0  Overflows: 0  Memory Usage: 3kB
+                          ->  Index Scan using utilizador_pkey on utilizador  (cost=0.29..0.71 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=19)
+                                Index Cond: (id_utilizador = emprestimo.id_utilizador)
+Planning Time: 0.259 ms
+Execution Time: 10.326 ms
+
+ENGARRAFAMENTOS QUERY 5:
+--Seq Scan em emprestimo com filtro data_devolucao_efetiva IS NOT NULL e data_devolucao_efetiva > data_devolucao_prevista; 
+--Nested Loop com Memoize; WindowAgg e Sort
+
+
+
+
+Interrogação 6:
+
+QUERY PLAN
+Sort  (cost=2892.39..2912.45 rows=8024 width=53) (actual time=22.107..22.715 rows=8049 loops=1)
+  Sort Key: emprestimo.data_emprestimo DESC
+  Sort Method: quicksort  Memory: 697kB
+  ->  Nested Loop  (cost=952.84..2372.03 rows=8024 width=53) (actual time=6.987..19.853 rows=8049 loops=1)
+        ->  Hash Join  (cost=952.54..1981.86 rows=8024 width=25) (actual time=6.967..14.508 rows=8049 loops=1)
+              Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+              ->  Seq Scan on emprestimo  (cost=0.00..1008.25 rows=8024 width=16) (actual time=0.058..5.602 rows=8049 loops=1)
+                    Filter: ((estado_emprestimo)::text = 'em curso'::text)
+                    Rows Removed by Filter: 32451
+              ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=6.864..6.865 rows=20202 loops=1)
+                    Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                    ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.003..3.404 rows=20202 loops=1)
+        ->  Memoize  (cost=0.30..0.80 rows=1 width=16) (actual time=0.000..0.000 rows=1 loops=8049)
+              Cache Key: emprestimo.id_utilizador
+              Cache Mode: logical
+              Hits: 8007  Misses: 42  Evictions: 0  Overflows: 0  Memory Usage: 5kB
+              ->  Index Scan using utilizador_pkey on utilizador  (cost=0.29..0.79 rows=1 width=16) (actual time=0.002..0.002 rows=1 loops=42)
+                    Index Cond: (id_utilizador = emprestimo.id_utilizador)
+Planning Time: 0.287 ms
+Execution Time: 23.100 ms
+
+ENGARRFAMENTOS QUERY 6:
+--Seq Scan em emprestimo com filtro em estado_emprestimo ('em curso') é o principal gargalo;
+--Seq Scan em recurso necessário para o Hash Join com emprestimo;
+--Memoize e Index Scan em utilizador já eficientes, impacto mínimo.
+
+
+
+
+Interrogação 7:
+
+QUERY PLAN
+Sort  (cost=6011.77..6062.27 rows=20200 width=286) (actual time=127.838..129.157 rows=20200 loops=1)
+  Sort Key: recurso.titulo
+  Sort Method: quicksort  Memory: 2722kB
+  ->  Hash Left Join  (cost=911.40..1872.26 rows=20200 width=286) (actual time=9.738..35.964 rows=20200 loops=1)
+        Hash Cond: (recurso.id_categoria = categoria.id_categoria)
+        ->  Hash Left Join  (cost=894.20..1750.83 rows=20200 width=64) (actual time=9.702..27.209 rows=20200 loops=1)
+              Hash Cond: (recurso.id_editora = editora.id_editora)
+              ->  Hash Left Join  (cost=723.25..1526.81 rows=20200 width=56) (actual time=8.092..20.733 rows=20200 loops=1)
+                    Hash Cond: (recurso.id_autor = autor.id_autor)
+                    ->  Seq Scan on recurso  (cost=0.00..750.52 rows=20200 width=36) (actual time=0.010..6.325 rows=20200 loops=1)
+                          Filter: ((estado)::text = 'Bom'::text)
+                          Rows Removed by Filter: 2
+                    ->  Hash  (cost=472.00..472.00 rows=20100 width=28) (actual time=8.032..8.034 rows=20100 loops=1)
+                          Buckets: 32768  Batches: 1  Memory Usage: 1473kB
+                          ->  Seq Scan on autor  (cost=0.00..472.00 rows=20100 width=28) (actual time=0.004..4.074 rows=20100 loops=1)
+              ->  Hash  (cost=108.20..108.20 rows=5020 width=16) (actual time=1.594..1.595 rows=5020 loops=1)
+                    Buckets: 8192  Batches: 1  Memory Usage: 316kB
+                    ->  Seq Scan on editora  (cost=0.00..108.20 rows=5020 width=16) (actual time=0.006..0.747 rows=5020 loops=1)
+        ->  Hash  (cost=13.20..13.20 rows=320 width=222) (actual time=0.023..0.024 rows=43 loops=1)
+              Buckets: 1024  Batches: 1  Memory Usage: 11kB
+              ->  Seq Scan on categoria  (cost=0.00..13.20 rows=320 width=222) (actual time=0.008..0.015 rows=43 loops=1)
+Planning Time: 0.412 ms
+Execution Time: 130.282 ms
+
+ENGARRFAMENTOS QUERY 7:
+--Seq Scan em recurso, autor, editora e categoria;
+--Sort sobre recurso.titulo;
+--LEFT JOINs sem filtros seletivos mantêm alto custo.
+
+
+
+Interrogação 8:
+
+QUERY PLAN
+Sort  (cost=8029.82..8155.57 rows=50300 width=56) (actual time=115.717..118.527 rows=50300 loops=1)
+  Sort Key: ((CURRENT_DATE - max(emprestimo.data_emprestimo))) DESC
+  Sort Method: quicksort  Memory: 4029kB
+  ->  HashAggregate  (cost=3221.57..4101.82 rows=50300 width=56) (actual time=79.165..102.520 rows=50300 loops=1)
+        Group Key: utilizador.id_utilizador
+        Batches: 1  Memory Usage: 5905kB
+        ->  Hash Right Join  (cost=1956.75..2970.07 rows=50300 width=20) (actual time=26.968..51.941 rows=90549 loops=1)
+              Hash Cond: (emprestimo.id_utilizador = utilizador.id_utilizador)
+              ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.010..3.527 rows=40500 loops=1)
+              ->  Hash  (cost=1328.00..1328.00 rows=50300 width=16) (actual time=26.856..26.857 rows=50300 loops=1)
+                    Buckets: 65536  Batches: 1  Memory Usage: 2935kB
+                    ->  Seq Scan on utilizador  (cost=0.00..1328.00 rows=50300 width=16) (actual time=0.010..13.528 rows=50300 loops=1)
+Planning Time: 0.212 ms
+Execution Time: 123.597 ms
+
+ENGARRAFAMENTOS QUERY 8:
+--Engarrafamentos identificados:
+--Seq Scan em emprestimo e utilizador, ambas tabelas grandes;
+--Sort e HashAggregate consomem tempo significativo devido ao número de linhas;
+--Filtro ou join não seletivo, resultando em alto custo de agregação;
+--Índices poderiam reduzir tempo em emprestimo (por id_utilizador ou data_emprestimo), mas ainda assim a agregação e o sort são inevitáveis
+
+
+
+Interrogação 9:
+
+QUERY PLAN
+Sort  (cost=18143.02..18193.52 rows=20202 width=25) (actual time=151.064..151.812 rows=12080 loops=1)
+  Sort Key: (count(reserva.id_reserva)) DESC
+  Sort Method: quicksort  Memory: 1048kB
+  ->  Finalize HashAggregate  (cost=16496.33..16698.35 rows=20202 width=25) (actual time=145.953..148.311 rows=12080 loops=1)
+        Group Key: recurso.id_recurso
+        Batches: 1  Memory Usage: 2065kB
+        ->  Gather  (cost=12051.89..16294.31 rows=40404 width=25) (actual time=137.603..140.273 rows=14615 loops=1)
+              Workers Planned: 2
+              Workers Launched: 2
+              ->  Partial HashAggregate  (cost=11051.89..11253.91 rows=20202 width=25) (actual time=132.205..133.374 rows=4872 loops=3)
+                    Group Key: recurso.id_recurso
+                    Batches: 1  Memory Usage: 1297kB
+                    Worker 0:  Batches: 1  Memory Usage: 1297kB
+                    Worker 1:  Batches: 1  Memory Usage: 1297kB
+                    ->  Hash Join  (cost=952.54..9793.45 rows=251688 width=21) (actual time=9.277..93.783 rows=201345 loops=3)
+                          Hash Cond: (reserva.id_recurso = recurso.id_recurso)
+                          ->  Parallel Seq Scan on reserva  (cost=0.00..8180.09 rows=251688 width=8) (actual time=0.060..41.720 rows=201345 loops=3)
+                                Filter: ((estado_reserva)::text = 'ativa'::text)
+                                Rows Removed by Filter: 5
+                          ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=8.985..8.986 rows=20202 loops=3)
+                                Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.020..4.249 rows=20202 loops=3)
+Planning Time: 0.243 ms
+Execution Time: 154.055 ms
+
+--Engarrafamentos QUERY 9:
+--Seq Scan em reserva com filtro em estado_reserva, grande volume de linhas processadas;
+--Hash Join com recurso, grande número de linhas;
+--Sort e HashAggregate finais consomem tempo significativo devido à agregação de muitas linhas;
+--Índices adicionais poderiam ajudar a reduzir o custo do filtro em reserva (estado_reserva) ou joins, mas ganhos dependem da seletividade.
+
+
+
+Interrogação 10:
+
+QUERY PLAN
+Sort  (cost=102299.38..102369.24 rows=27944 width=64) (actual time=2195.399..2211.160 rows=50299 loops=1)
+"  Sort Key: (count(DISTINCT emprestimo.id_emprestimo)) DESC, (count(DISTINCT reserva.id_reserva)) DESC"
+  Sort Method: external merge  Disk: 2984kB
+  ->  GroupAggregate  (cost=93370.82..100235.68 rows=27944 width=64) (actual time=1624.617..2152.396 rows=50299 loops=1)
+        Group Key: utilizador.id_utilizador
+        Filter: ((count(DISTINCT emprestimo.id_emprestimo) > 0) OR (count(DISTINCT reserva.id_reserva) > 0))
+        Rows Removed by Filter: 1
+        ->  Sort  (cost=93370.82..94880.95 rows=604050 width=24) (actual time=1624.439..1801.946 rows=1023232 loops=1)
+"              Sort Key: utilizador.id_utilizador, emprestimo.id_emprestimo"
+              Sort Method: external merge  Disk: 34840kB
+              ->  Hash Full Join  (cost=3598.82..22979.01 rows=604050 width=24) (actual time=97.654..521.768 rows=1023232 loops=1)
+                    Hash Cond: (reserva.id_utilizador = utilizador.id_utilizador)
+                    ->  Seq Scan on reserva  (cost=0.00..11074.50 rows=604050 width=8) (actual time=0.155..80.539 rows=604050 loops=1)
+                    ->  Hash  (cost=2970.07..2970.07 rows=50300 width=20) (actual time=97.252..97.264 rows=90549 loops=1)
+                          Buckets: 131072 (originally 65536)  Batches: 1 (originally 1)  Memory Usage: 5634kB
+                          ->  Hash Full Join  (cost=1956.75..2970.07 rows=50300 width=20) (actual time=44.640..71.719 rows=90549 loops=1)
+                                Hash Cond: (emprestimo.id_utilizador = utilizador.id_utilizador)
+                                ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.013..4.064 rows=40500 loops=1)
+                                ->  Hash  (cost=1328.00..1328.00 rows=50300 width=16) (actual time=44.435..44.437 rows=50300 loops=1)
+                                      Buckets: 65536  Batches: 1  Memory Usage: 2935kB
+                                      ->  Seq Scan on utilizador  (cost=0.00..1328.00 rows=50300 width=16) (actual time=19.568..31.439 rows=50300 loops=1)
+Planning Time: 0.324 ms
+JIT:
+  Functions: 26
+"  Options: Inlining false, Optimization false, Expressions true, Deforming true"
+"  Timing: Generation 1.807 ms, Inlining 0.000 ms, Optimization 0.710 ms, Emission 19.014 ms, Total 21.531 ms"
+Execution Time: 2231.234 ms
+
+ENGARRAFAMENTOS QUERY 10
+--Seq Scan em reserva e emprestimo;
+--Hash Full Joins múltiplos envolvendo utilizador, emprestimo e reserva;
+--Sorts externos grandes em disco (external merge) devido ao volume de linhas;
+--GroupAggregate final processando 50k+ linhas;
+--Altíssimo custo de I/O e CPU, query limitada por agregações e joins complexos;
+--Índices adicionais sobre emprestimo ou reserva ajudariam apenas parcialmente;
+
+
+
+
+Interrogação 11:
+
+QUERY PLAN
+Sort  (cost=9817.73..9817.74 rows=1 width=52) (actual time=50.369..55.828 rows=1 loops=1)
+  Sort Key: reserva.data_limite_levantamento
+  Sort Method: quicksort  Memory: 25kB
+  ->  Nested Loop  (cost=1000.29..9817.72 rows=1 width=52) (actual time=0.431..55.811 rows=1 loops=1)
+        ->  Gather  (cost=1000.00..9809.41 rows=1 width=20) (actual time=0.415..55.792 rows=1 loops=1)
+              Workers Planned: 2
+              Workers Launched: 2
+              ->  Parallel Seq Scan on reserva  (cost=0.00..8809.31 rows=1 width=20) (actual time=15.583..32.194 rows=0 loops=3)
+                    Filter: ((data_levantamento IS NULL) AND (data_limite_levantamento < CURRENT_DATE))
+                    Rows Removed by Filter: 201350
+        ->  Index Scan using utilizador_pkey on utilizador  (cost=0.29..8.31 rows=1 width=16) (actual time=0.009..0.010 rows=1 loops=1)
+              Index Cond: (id_utilizador = reserva.id_utilizador)
+Planning Time: 0.225 ms
+Execution Time: 55.862 ms
+
+Engarrafamentos QUERY 11:
+-- Seq Scan em reserva com filtro sobre data_levantamento e data_limite_levantamento;
+-- Paralelização ajuda, mas ainda lê muitas linhas desnecessárias (Rows Removed by Filter: 201350);
+-- Nested Loop com utilizador_pkey é rápido e não é gargalo;
+-- Principal gargalo é o acesso à tabela reserva; 
+-- Criar índice adequado sobre (data_levantamento, data_limite_levantamento) parcial para reservas pendentes ajudaria significativamente.
+
+
+
+Interrogação 12:
+
+QUERY PLAN
+Sort  (cost=14672.47..14672.47 rows=1 width=263) (actual time=191.999..192.004 rows=0 loops=1)
+  Sort Key: recurso.titulo
+  Sort Method: quicksort  Memory: 25kB
+  ->  Nested Loop Left Join  (cost=13613.46..14672.46 rows=1 width=263) (actual time=191.994..191.998 rows=0 loops=1)
+        ->  Nested Loop Left Join  (cost=13613.31..14672.29 rows=1 width=41) (actual time=191.993..191.997 rows=0 loops=1)
+              ->  Hash Right Join  (cost=13613.02..14671.92 rows=1 width=21) (actual time=191.993..191.996 rows=0 loops=1)
+                    Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+                    Filter: (emprestimo.id_emprestimo IS NULL)
+                    Rows Removed by Filter: 27855
+                    ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.012..3.695 rows=40500 loops=1)
+                    ->  Hash  (cost=13613.01..13613.01 rows=1 width=25) (actual time=180.267..180.269 rows=8121 loops=1)
+                          Buckets: 8192 (originally 1024)  Batches: 1 (originally 1)  Memory Usage: 540kB
+                          ->  Hash Right Join  (cost=952.54..13613.01 rows=1 width=25) (actual time=175.975..178.623 rows=8121 loops=1)
+                                Hash Cond: (reserva.id_recurso = recurso.id_recurso)
+                                Filter: (reserva.id_reserva IS NULL)
+                                Rows Removed by Filter: 604050
+                                ->  Seq Scan on reserva  (cost=0.00..11074.50 rows=604050 width=8) (actual time=0.057..57.454 rows=604050 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=25) (actual time=8.527..8.528 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1439kB
+                                      ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=25) (actual time=0.007..4.641 rows=20202 loops=1)
+              ->  Index Scan using autor_pkey on autor  (cost=0.29..0.37 rows=1 width=28) (never executed)
+                    Index Cond: (id_autor = recurso.id_autor)
+        ->  Index Scan using categoria_pkey on categoria  (cost=0.15..0.17 rows=1 width=222) (never executed)
+              Index Cond: (id_categoria = recurso.id_categoria)
+Planning Time: 0.494 ms
+Execution Time: 192.063 ms
+
+ENGARRAFAMENTOS QUERY 12:
+--Seq Scans massivos em emprestimo (40k linhas), reserva (604k linhas) e recurso (20k linhas) — principal fonte de custo;
+--Hash Joins gigantes com filtros IS NULL, removendo centenas de milhares de linhas — operação muito pesada;
+--Dois Right Joins em cascata geram tabelas hash grandes e lentas;
+--Nested Loops superiores nunca chegam a executar partes do plano (autor, categoria) devido ao filtro que elimina todas as linhas;
+--Sort final irrelevante, custo mínimo — gargalo está muito antes dele;
+--Tempo de execução elevado (192 ms) devido a scans completos e filtros no lado errado dos joins;
+
+
+
+Interrogação 13:
+
+QUERY PLAN
+Sort  (cost=2168.93..2168.96 rows=11 width=49) (actual time=30.874..30.877 rows=11 loops=1)
+  Sort Key: (count(emprestimo.id_emprestimo)) DESC
+  Sort Method: quicksort  Memory: 25kB
+  ->  WindowAgg  (cost=2168.38..2168.74 rows=11 width=49) (actual time=30.855..30.866 rows=11 loops=1)
+        ->  HashAggregate  (cost=2168.38..2168.49 rows=11 width=17) (actual time=30.834..30.838 rows=11 loops=1)
+              Group Key: recurso.idioma
+              Batches: 1  Memory Usage: 24kB
+              ->  Hash Join  (cost=952.54..1965.88 rows=40500 width=13) (actual time=7.638..22.142 rows=40500 loops=1)
+                    Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+                    ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.007..3.628 rows=40500 loops=1)
+                    ->  Hash  (cost=700.02..700.02 rows=20202 width=13) (actual time=7.583..7.584 rows=20202 loops=1)
+                          Buckets: 32768  Batches: 1  Memory Usage: 1172kB
+                          ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=13) (actual time=0.004..3.903 rows=20202 loops=1)
+Planning Time: 0.210 ms
+Execution Time: 30.933 ms
+
+ENGARRAFAMENTOS QUERY 13:
+--Seq Scans em emprestimo (40k linhas) e recurso (20k linhas) — principal fonte de custo
+--Hash Join entre emprestimo e recurso — operação relativamente pesada mas aceitável neste volume
+--Sort final e WindowAgg sobre poucos resultados (11 linhas) — custo mínimo, não impacta muito
+--Índices adicionais teriam pouco efeito, gargalo principal é o scan completo das tabelas
+
+
+
+
+Interrogação 14:
+
+QUERY PLAN
+Sort  (cost=1630.15..1630.74 rows=234 width=48) (actual time=28.635..28.637 rows=13 loops=1)
+"  Sort Key: (to_char((date_trunc('month'::text, (data_emprestimo)::timestamp with time zone)), 'YYYY-MM'::text))"
+  Sort Method: quicksort  Memory: 25kB
+  ->  HashAggregate  (cost=1615.68..1620.94 rows=234 width=48) (actual time=28.600..28.611 rows=13 loops=1)
+"        Group Key: date_trunc('month'::text, (data_emprestimo)::timestamp with time zone)"
+        Batches: 1  Memory Usage: 37kB
+        ->  Seq Scan on emprestimo  (cost=0.00..1413.21 rows=40493 width=12) (actual time=0.015..21.344 rows=40490 loops=1)
+              Filter: (data_emprestimo >= (CURRENT_DATE - '1 year'::interval))
+              Rows Removed by Filter: 10
+Planning Time: 0.150 ms
+Execution Time: 28.676 ms
+
+ENGARRAFAMENTOS QUERY 14:
+-- Seq Scan massivo em emprestimo (≈40k linhas), principal fonte de custo;
+-- HashAggregate sobre meses gera apenas 13 linhas — custo desprezível;
+-- Sort final sobre 13 linhas irrelevante.
+
+
+
+
+
+Interrogação 15:
+
+QUERY PLAN
+Sort  (cost=4888.35..4938.60 rows=20100 width=44) (actual time=74.222..75.388 rows=20070 loops=1)
+  Sort Key: (count(emprestimo.id_emprestimo)) DESC
+  Sort Method: quicksort  Memory: 2022kB
+  ->  HashAggregate  (cost=3200.46..3451.71 rows=20100 width=44) (actual time=65.684..69.884 rows=20070 loops=1)
+"        Group Key: autor.id_autor, concat(autor.primeiro_nome_autor, ' ', autor.ultimo_nome_autor)"
+        Batches: 1  Memory Usage: 2833kB
+        ->  Hash Join  (cost=1675.80..2896.71 rows=40500 width=40) (actual time=15.805..51.672 rows=40500 loops=1)
+              Hash Cond: (recurso.id_autor = autor.id_autor)
+              ->  Hash Join  (cost=952.54..1965.88 rows=40500 width=8) (actual time=7.758..24.516 rows=40500 loops=1)
+                    Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+                    ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.007..3.830 rows=40500 loops=1)
+                    ->  Hash  (cost=700.02..700.02 rows=20202 width=8) (actual time=7.704..7.705 rows=20202 loops=1)
+                          Buckets: 32768  Batches: 1  Memory Usage: 1046kB
+                          ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=8) (actual time=0.003..4.385 rows=20202 loops=1)
+              ->  Hash  (cost=472.00..472.00 rows=20100 width=28) (actual time=7.994..7.995 rows=20100 loops=1)
+                    Buckets: 32768  Batches: 1  Memory Usage: 1451kB
+                    ->  Seq Scan on autor  (cost=0.00..472.00 rows=20100 width=28) (actual time=0.007..4.075 rows=20100 loops=1)
+Planning Time: 0.311 ms
+Execution Time: 76.374 ms
+
+ENGARRAFAMENTOS QUERY 15:
+-- Seq Scans massivos em emprestimo (40k linhas), recurso (20k linhas) e autor (20k linhas) — principal fonte de custo
+-- Dois Hash Joins em cascata processando todas as linhas — operação pesada
+-- Hash Aggregates sobre 40k linhas para agrupar por autor — consumo significativo de memória
+-- Sort final sobre 20k linhas — custo baixo comparado aos joins e scans
+-- Gargalo principal: Seq Scans + Hash Joins
+
+
+
+
+Interrogação 16:
+
+QUERY PLAN
+WindowAgg  (cost=1191.26..1363.39 rows=4050 width=72) (actual time=12.059..12.063 rows=3 loops=1)
+  ->  HashAggregate  (cost=1191.26..1252.01 rows=4050 width=40) (actual time=12.021..12.045 rows=3 loops=1)
+        Group Key: CASE WHEN (data_devolucao_efetiva < data_devolucao_prevista) THEN 'Adiantado'::text WHEN (data_devolucao_efetiva = data_devolucao_prevista) THEN 'No dia da devolu��o prevista'::text ELSE 'Atrasado'::text END
+        Batches: 1  Memory Usage: 217kB
+        ->  Seq Scan on emprestimo  (cost=0.00..1049.13 rows=28426 width=32) (actual time=0.012..6.637 rows=28420 loops=1)
+              Filter: (data_devolucao_efetiva IS NOT NULL)
+              Rows Removed by Filter: 12080
+Planning Time: 0.099 ms
+Execution Time: 12.151 ms
+
+ENGARRAFAMENTOS QUERY 16:
+-- Seq Scan completo em emprestimo — 28k linhas lidas
+-- Filtro data_devolucao_efetiva IS NOT NULL remove 12k linhas
+-- HashAggregate sobre 28k linhas — memória baixa (217kB)
+-- WindowAgg processa apenas 3 linhas resultantes — custo irrelevante
+-- Gargalo principal: scan completo da tabela emprestimo
+-- Índices provavelmente não ajudariam significativamente, pois a agregação é sobre todas as linhas filtradas
+
+
+
+
+
+Interrogação 17:
+
+QUERY PLAN
+Sort  (cost=3958.98..3959.05 rows=28 width=44) (actual time=49.782..49.787 rows=21 loops=1)
+  Sort Key: (count(emprestimo.id_emprestimo)) DESC
+  Sort Method: quicksort  Memory: 26kB
+  InitPlan 1 (returns $0)
+    ->  Aggregate  (cost=1008.25..1008.26 rows=1 width=8) (actual time=5.461..5.462 rows=1 loops=1)
+          ->  Seq Scan on emprestimo emprestimo_1  (cost=0.00..907.00 rows=40500 width=0) (actual time=0.017..3.263 rows=40500 loops=1)
+  ->  HashAggregate  (cost=2949.35..2950.05 rows=28 width=44) (actual time=49.750..49.773 rows=21 loops=1)
+        Group Key: aluno.curso
+        Batches: 1  Memory Usage: 24kB
+        ->  Hash Join  (cost=753.30..2847.90 rows=20290 width=8) (actual time=8.158..37.023 rows=36319 loops=1)
+              Hash Cond: (emprestimo.id_utilizador = aluno.id_utilizador)
+              ->  Nested Loop  (cost=0.30..1988.56 rows=40500 width=12) (actual time=0.018..21.116 rows=40500 loops=1)
+                    ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.006..3.603 rows=40500 loops=1)
+                    ->  Memoize  (cost=0.30..0.33 rows=1 width=4) (actual time=0.000..0.000 rows=1 loops=40500)
+                          Cache Key: emprestimo.id_utilizador
+                          Cache Mode: logical
+                          Hits: 40249  Misses: 251  Evictions: 0  Overflows: 0  Memory Usage: 26kB
+                          ->  Index Only Scan using utilizador_pkey on utilizador  (cost=0.29..0.32 rows=1 width=4) (actual time=0.001..0.001 rows=1 loops=251)
+                                Index Cond: (id_utilizador = emprestimo.id_utilizador)
+                                Heap Fetches: 0
+              ->  Hash  (cost=438.00..438.00 rows=25200 width=8) (actual time=8.077..8.077 rows=25200 loops=1)
+                    Buckets: 32768  Batches: 1  Memory Usage: 1243kB
+                    ->  Seq Scan on aluno  (cost=0.00..438.00 rows=25200 width=8) (actual time=0.007..3.855 rows=25200 loops=1)
+Planning Time: 0.490 ms
+Execution Time: 49.866 ms
+
+ENGARRAFAMENTOS QUERY 17:
+-- Seq Scan massivo em emprestimo (40k linhas) → principal custo inicial
+-- Seq Scan completo em aluno (25k linhas) para construir o hash → operação pesada
+-- Hash Join sobre 36k linhas resultantes → custo intermediário elevado
+-- Nested Loop + Memoize a repetir lookup 40k vezes (apesar do cache ajudar, ainda é caro)
+-- Aggregate final sobre 36k linhas → custo moderado, não é o gargalo
+-- Sort final irrelevante comparado aos scans grandes
+--Nesta query, índices quase não ajudam porque os maiores custos vêm de Seq Scans muito grandes
+
+
+
+Interrogação 18:
+
+QUERY PLAN
+Sort  (cost=299.24..299.27 rows=10 width=116) (actual time=4.064..4.066 rows=10 loops=1)
+"  Sort Key: (round(avg(salario), 2)) DESC"
+  Sort Method: quicksort  Memory: 25kB
+  ->  HashAggregate  (cost=298.88..299.07 rows=10 width=116) (actual time=4.043..4.053 rows=10 loops=1)
+        Group Key: cargo
+        Batches: 1  Memory Usage: 24kB
+        ->  Seq Scan on funcionario  (cost=0.00..204.50 rows=7550 width=18) (actual time=0.065..0.715 rows=7550 loops=1)
+Planning Time: 0.089 ms
+Execution Time: 4.116 ms
+
+ENGARRAFAMENTOS QUERY 18:
+-- Seq Scan completo em funcionario (7550 linhas) — único ponto relevante de custo
+-- HashAggregate obrigatório, precisa de ler todas as linhas antes de agregar
+-- Sort final insignificante — custo muito baixo
+--Índices não ajudariam. A query lê todas as linhas para calcular AVG(salario) por cargo, por isso mesmo com índice teria de fazer Seq Scan na mesma.
+
+
+
+Interrogação 19:
+
+QUERY PLAN
+Sort  (cost=4659.83..4659.98 rows=58 width=72) (actual time=38.014..38.016 rows=7 loops=1)
+  Sort Key: (CASE WHEN ((utilizador.idade >= 15) AND (utilizador.idade <= 20)) THEN '15-20 anos'::text WHEN ((utilizador.idade >= 21) AND (utilizador.idade <= 25)) THEN '21-25 anos'::text WHEN ((utilizador.idade >= 26) AND (utilizador.idade <= 35)) THEN '26-35 anos'::text WHEN ((utilizador.idade >= 36) AND (utilizador.idade <= 45)) THEN '36-45 anos'::text WHEN ((utilizador.idade >= 46) AND (utilizador.idade <= 55)) THEN '46-55 anos'::text WHEN ((utilizador.idade >= 56) AND (utilizador.idade <= 65)) THEN '56-65 anos'::text WHEN (utilizador.idade > 65) THEN '65+ anos'::text ELSE 'Idade desconhecida'::text END)
+  Sort Method: quicksort  Memory: 25kB
+  InitPlan 1 (returns $0)
+    ->  Aggregate  (cost=1440.54..1440.55 rows=1 width=8) (actual time=8.683..8.684 rows=1 loops=1)
+          ->  Index Only Scan using utilizador_pkey on utilizador utilizador_1  (cost=0.29..1314.79 rows=50300 width=0) (actual time=0.028..5.740 rows=50300 loops=1)
+                Heap Fetches: 0
+  ->  HashAggregate  (cost=3214.25..3217.59 rows=58 width=72) (actual time=37.992..37.999 rows=7 loops=1)
+        Group Key: CASE WHEN ((utilizador.idade >= 15) AND (utilizador.idade <= 20)) THEN '15-20 anos'::text WHEN ((utilizador.idade >= 21) AND (utilizador.idade <= 25)) THEN '21-25 anos'::text WHEN ((utilizador.idade >= 26) AND (utilizador.idade <= 35)) THEN '26-35 anos'::text WHEN ((utilizador.idade >= 36) AND (utilizador.idade <= 45)) THEN '36-45 anos'::text WHEN ((utilizador.idade >= 46) AND (utilizador.idade <= 55)) THEN '46-55 anos'::text WHEN ((utilizador.idade >= 56) AND (utilizador.idade <= 65)) THEN '56-65 anos'::text WHEN (utilizador.idade > 65) THEN '65+ anos'::text ELSE 'Idade desconhecida'::text END
+        Batches: 1  Memory Usage: 24kB
+        ->  Seq Scan on utilizador  (cost=0.00..2962.75 rows=50300 width=32) (actual time=0.009..18.945 rows=50300 loops=1)
+Planning Time: 0.183 ms
+Execution Time: 38.066 ms
+
+ENGARRAFAMENTOS QUERY 19:
+-- Seq Scan massivo na tabela utilizador (50k linhas) para calcular grupos de idade;
+-- HashAggregate em cima de todo o conjunto (50k linhas) — custo elevado;
+-- InitPlan faz Aggregate + Index Only Scan (utilizador_pkey) apenas para contar linhas, não acelera o principal;
+-- Sort final irrelevante — gargalo verdadeiro está no Seq Scan grande.
+--Índices não devem ajudar significativamente pois a query exige ler TODAS as idades da tabela utilizador para os agrupar em faixas.
+
+
+
+
+Interrogação 20:
+
+QUERY PLAN
+Merge Append  (cost=10013.91..11332.77 rows=202 width=53) (actual time=94.124..97.393 rows=3 loops=1)
+"  Sort Key: ""*SELECT* 1"".total_emprestimos DESC"
+"  ->  Subquery Scan on ""*SELECT* 1""  (cost=3358.84..3802.92 rows=68 width=53) (actual time=31.687..32.898 rows=1 loops=1)"
+"        Filter: (""*SELECT* 1"".lista = 1)"
+        ->  WindowAgg  (cost=3358.84..3632.12 rows=13664 width=61) (actual time=31.686..32.895 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=3358.84..3393.00 rows=13664 width=53) (actual time=31.679..32.172 rows=6816 loops=1)
+                    Sort Key: (count(emprestimo.id_emprestimo)) DESC
+                    Sort Method: quicksort  Memory: 567kB
+                    ->  HashAggregate  (cost=2283.61..2420.25 rows=13664 width=53) (actual time=29.035..30.235 rows=6816 loops=1)
+                          Group Key: recurso.titulo
+                          Batches: 1  Memory Usage: 913kB
+                          ->  Hash Join  (cost=1162.90..2215.29 rows=13664 width=17) (actual time=8.777..24.488 rows=13772 loops=1)
+                                Hash Cond: (emprestimo.id_recurso = recurso.id_recurso)
+                                ->  Hash Join  (cost=210.36..1223.69 rows=14873 width=12) (actual time=1.749..14.245 rows=13772 loops=1)
+                                      Hash Cond: (emprestimo.id_recurso = livro.id_recurso)
+                                      ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.007..3.876 rows=40500 loops=1)
+                                      ->  Hash  (cost=125.16..125.16 rows=6816 width=4) (actual time=1.724..1.725 rows=6816 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 304kB
+                                            ->  Seq Scan on livro  (cost=0.00..125.16 rows=6816 width=4) (actual time=0.004..0.829 rows=6816 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=6.980..6.981 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.005..3.560 rows=20202 loops=1)
+"  ->  Subquery Scan on ""*SELECT* 2""  (cost=3331.02..3767.11 rows=67 width=53) (actual time=30.600..31.688 rows=1 loops=1)"
+"        Filter: (""*SELECT* 2"".lista = 1)"
+        ->  WindowAgg  (cost=3331.02..3599.38 rows=13418 width=61) (actual time=30.598..31.686 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=3331.02..3364.57 rows=13418 width=53) (actual time=30.592..31.048 rows=6693 loops=1)
+                    Sort Key: (count(emprestimo_1.id_emprestimo)) DESC
+                    Sort Method: quicksort  Memory: 559kB
+                    ->  HashAggregate  (cost=2276.91..2411.09 rows=13418 width=53) (actual time=28.030..29.183 rows=6693 loops=1)
+                          Group Key: recurso_1.titulo
+                          Batches: 1  Memory Usage: 913kB
+                          ->  Hash Join  (cost=1158.14..2209.82 rows=13418 width=17) (actual time=8.884..23.823 rows=13297 loops=1)
+                                Hash Cond: (emprestimo_1.id_recurso = recurso_1.id_recurso)
+                                ->  Hash Join  (cost=205.59..1218.93 rows=14605 width=12) (actual time=1.762..13.707 rows=13297 loops=1)
+                                      Hash Cond: (emprestimo_1.id_recurso = ebook.id_recurso)
+                                      ->  Seq Scan on emprestimo emprestimo_1  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.006..3.752 rows=40500 loops=1)
+                                      ->  Hash  (cost=121.93..121.93 rows=6693 width=4) (actual time=1.673..1.674 rows=6693 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                            ->  Seq Scan on ebook  (cost=0.00..121.93 rows=6693 width=4) (actual time=0.005..0.786 rows=6693 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=7.077..7.077 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso recurso_1  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.005..3.431 rows=20202 loops=1)
+"  ->  Subquery Scan on ""*SELECT* 3""  (cost=3324.02..3760.11 rows=67 width=53) (actual time=31.833..32.801 rows=1 loops=1)"
+"        Filter: (""*SELECT* 3"".lista = 1)"
+        ->  WindowAgg  (cost=3324.02..3592.38 rows=13418 width=61) (actual time=31.831..32.798 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=3324.02..3357.57 rows=13418 width=53) (actual time=31.823..32.217 rows=6693 loops=1)
+                    Sort Key: (count(emprestimo_2.id_emprestimo)) DESC
+                    Sort Method: quicksort  Memory: 611kB
+                    ->  HashAggregate  (cost=2269.91..2404.09 rows=13418 width=53) (actual time=28.791..30.132 rows=6693 loops=1)
+                          Group Key: recurso_2.titulo
+                          Batches: 1  Memory Usage: 913kB
+                          ->  Hash Join  (cost=1151.14..2202.82 rows=13418 width=17) (actual time=9.295..24.531 rows=13431 loops=1)
+                                Hash Cond: (emprestimo_2.id_recurso = recurso_2.id_recurso)
+                                ->  Hash Join  (cost=198.59..1211.93 rows=14605 width=12) (actual time=2.577..14.743 rows=13431 loops=1)
+                                      Hash Cond: (emprestimo_2.id_recurso = periodico.id_recurso)
+                                      ->  Seq Scan on emprestimo emprestimo_2  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.006..3.819 rows=40500 loops=1)
+                                      ->  Hash  (cost=114.93..114.93 rows=6693 width=4) (actual time=2.493..2.494 rows=6693 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                            ->  Seq Scan on periodico  (cost=0.00..114.93 rows=6693 width=4) (actual time=0.006..1.132 rows=6693 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=6.659..6.660 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso recurso_2  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.006..3.260 rows=20202 loops=1)
+Planning Time: 1.102 ms
+Execution Time: 97.782 ms
+
+ENGARRAFAMENTOS QUERY 20:
+--Seq Scans massivos em emprestimo (40500 linhas) e nas tabelas livro, ebook e periodico (~6700 linhas cada); 
+--Hash Joins grandes com muitos dados; 
+--Sorts e WindowAggs em cima de agregações volumosas.
+--Índices poderiam ajudar, principalmente em emprestimo.id_recurso e nas tabelas de tipo (livro, ebook, periodico) para reduzir leitura sequencial, mas o grande volume de joins e agregações ainda manterá custo elevado.
+
+
+
+Interrogação 21:
+
+QUERY PLAN
+GroupAggregate  (cost=5953.18..7471.93 rows=40500 width=80) (actual time=60.279..61.089 rows=3 loops=1)
+  Group Key: (CASE WHEN (aluno.id_utilizador IS NOT NULL) THEN 'Aluno'::text WHEN (professor.id_utilizador IS NOT NULL) THEN 'Professor'::text WHEN (funcionario.id_utilizador IS NOT NULL) THEN 'Funcionario'::text ELSE 'Outro'::text END)
+  ->  Sort  (cost=5953.18..6054.43 rows=40500 width=36) (actual time=53.128..55.485 rows=40500 loops=1)
+        Sort Key: (CASE WHEN (aluno.id_utilizador IS NOT NULL) THEN 'Aluno'::text WHEN (professor.id_utilizador IS NOT NULL) THEN 'Professor'::text WHEN (funcionario.id_utilizador IS NOT NULL) THEN 'Funcionario'::text ELSE 'Outro'::text END)
+        Sort Method: quicksort  Memory: 3119kB
+        ->  Hash Left Join  (cost=1627.75..2853.79 rows=40500 width=36) (actual time=14.317..45.922 rows=40500 loops=1)
+              Hash Cond: (emprestimo.id_utilizador = funcionario.id_utilizador)
+              ->  Hash Left Join  (cost=1328.88..2448.54 rows=40500 width=16) (actual time=12.355..36.548 rows=40500 loops=1)
+                    Hash Cond: (emprestimo.id_utilizador = professor.id_utilizador)
+                    ->  Hash Left Join  (cost=753.00..1766.33 rows=40500 width=12) (actual time=7.338..24.832 rows=40500 loops=1)
+                          Hash Cond: (emprestimo.id_utilizador = aluno.id_utilizador)
+                          ->  Seq Scan on emprestimo  (cost=0.00..907.00 rows=40500 width=8) (actual time=0.007..4.656 rows=40500 loops=1)
+                          ->  Hash  (cost=438.00..438.00 rows=25200 width=4) (actual time=7.271..7.272 rows=25200 loops=1)
+                                Buckets: 32768  Batches: 1  Memory Usage: 1142kB
+                                ->  Seq Scan on aluno  (cost=0.00..438.00 rows=25200 width=4) (actual time=0.004..3.484 rows=25200 loops=1)
+                    ->  Hash  (cost=356.50..356.50 rows=17550 width=4) (actual time=4.967..4.967 rows=17550 loops=1)
+                          Buckets: 32768  Batches: 1  Memory Usage: 873kB
+                          ->  Seq Scan on professor  (cost=0.00..356.50 rows=17550 width=4) (actual time=0.006..2.542 rows=17550 loops=1)
+              ->  Hash  (cost=204.50..204.50 rows=7550 width=4) (actual time=1.938..1.938 rows=7550 loops=1)
+                    Buckets: 8192  Batches: 1  Memory Usage: 330kB
+                    ->  Seq Scan on funcionario  (cost=0.00..204.50 rows=7550 width=4) (actual time=0.055..0.957 rows=7550 loops=1)
+Planning Time: 0.415 ms
+Execution Time: 61.189 ms
+
+ENGARRAFAMENTOS QUERY 21:
+--Muitos Hash Left Joins sequenciais e um grande Sort; 
+--Seq Scans nas tabelas aluno, professor e funcionario processando milhares de linhas.
+
+
+
+
+Interrogação 22:
+
+QUERY PLAN
+Merge Append  (cost=52071.05..54044.66 rows=303 width=53) (actual time=771.465..773.319 rows=3 loops=1)
+"  Sort Key: ""*SELECT* 1"".total_reservas DESC"
+"  ->  Subquery Scan on ""*SELECT* 1""  (cost=17385.56..18042.13 rows=101 width=53) (actual time=276.685..277.380 rows=1 loops=1)"
+"        Filter: (""*SELECT* 1"".lista = 1)"
+        ->  WindowAgg  (cost=17385.56..17789.60 rows=20202 width=61) (actual time=276.683..277.378 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=17385.56..17436.07 rows=20202 width=53) (actual time=276.675..276.932 rows=4132 loops=1)
+                    Sort Key: (count(reserva.id_reserva)) DESC
+                    Sort Method: quicksort  Memory: 420kB
+                    ->  HashAggregate  (cost=15738.87..15940.89 rows=20202 width=53) (actual time=274.606..275.745 rows=4132 loops=1)
+                          Group Key: recurso.titulo
+                          Batches: 1  Memory Usage: 1297kB
+                          ->  Hash Join  (cost=1162.90..14719.86 rows=203802 width=17) (actual time=14.825..225.136 rows=206584 loops=1)
+                                Hash Cond: (reserva.id_recurso = recurso.id_recurso)
+                                ->  Hash Join  (cost=210.36..12871.05 rows=341365 width=12) (actual time=3.038..166.601 rows=206584 loops=1)
+                                      Hash Cond: (reserva.id_recurso = livro.id_recurso)
+                                      ->  Seq Scan on reserva  (cost=0.00..11074.50 rows=604050 width=8) (actual time=0.075..63.593 rows=604050 loops=1)
+                                      ->  Hash  (cost=125.16..125.16 rows=6816 width=4) (actual time=2.943..2.944 rows=6816 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 304kB
+                                            ->  Seq Scan on livro  (cost=0.00..125.16 rows=6816 width=4) (actual time=0.005..1.292 rows=6816 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=11.734..11.735 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.007..5.099 rows=20202 loops=1)
+"  ->  Subquery Scan on ""*SELECT* 2""  (cost=17346.23..18002.80 rows=101 width=53) (actual time=248.465..249.046 rows=1 loops=1)"
+"        Filter: (""*SELECT* 2"".lista = 1)"
+        ->  WindowAgg  (cost=17346.23..17750.27 rows=20202 width=61) (actual time=248.464..249.043 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=17346.23..17396.74 rows=20202 width=53) (actual time=248.455..248.684 rows=4007 loops=1)
+                    Sort Key: (count(reserva_1.id_reserva)) DESC
+                    Sort Method: quicksort  Memory: 316kB
+                    ->  HashAggregate  (cost=15699.55..15901.57 rows=20202 width=53) (actual time=246.634..247.614 rows=4007 loops=1)
+                          Group Key: recurso_1.titulo
+                          Batches: 1  Memory Usage: 1041kB
+                          ->  Hash Join  (cost=1158.14..14698.93 rows=200124 width=17) (actual time=10.286..203.905 rows=200360 loops=1)
+                                Hash Cond: (reserva_1.id_recurso = recurso_1.id_recurso)
+                                ->  Hash Join  (cost=205.59..12866.28 rows=335205 width=12) (actual time=3.078..157.196 rows=200360 loops=1)
+                                      Hash Cond: (reserva_1.id_recurso = ebook.id_recurso)
+                                      ->  Seq Scan on reserva reserva_1  (cost=0.00..11074.50 rows=604050 width=8) (actual time=0.056..59.767 rows=604050 loops=1)
+                                      ->  Hash  (cost=121.93..121.93 rows=6693 width=4) (actual time=3.005..3.006 rows=6693 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                            ->  Seq Scan on ebook  (cost=0.00..121.93 rows=6693 width=4) (actual time=0.006..1.410 rows=6693 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=7.134..7.134 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso recurso_1  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.008..3.504 rows=20202 loops=1)
+"  ->  Subquery Scan on ""*SELECT* 3""  (cost=17339.23..17995.80 rows=101 width=53) (actual time=246.311..246.886 rows=1 loops=1)"
+"        Filter: (""*SELECT* 3"".lista = 1)"
+        ->  WindowAgg  (cost=17339.23..17743.27 rows=20202 width=61) (actual time=246.308..246.883 rows=1 loops=1)
+              Run Condition: (row_number() OVER (?) <= 1)
+              ->  Sort  (cost=17339.23..17389.74 rows=20202 width=53) (actual time=246.300..246.522 rows=3942 loops=1)
+                    Sort Key: (count(reserva_2.id_reserva)) DESC
+                    Sort Method: quicksort  Memory: 343kB
+                    ->  HashAggregate  (cost=15692.55..15894.57 rows=20202 width=53) (actual time=244.543..245.407 rows=3942 loops=1)
+                          Group Key: recurso_2.titulo
+                          Batches: 1  Memory Usage: 1041kB
+                          ->  Hash Join  (cost=1151.14..14691.93 rows=200124 width=17) (actual time=8.691..201.914 rows=197106 loops=1)
+                                Hash Cond: (reserva_2.id_recurso = recurso_2.id_recurso)
+                                ->  Hash Join  (cost=198.59..12859.28 rows=335205 width=12) (actual time=1.797..155.280 rows=197106 loops=1)
+                                      Hash Cond: (reserva_2.id_recurso = periodico.id_recurso)
+                                      ->  Seq Scan on reserva reserva_2  (cost=0.00..11074.50 rows=604050 width=8) (actual time=0.085..59.192 rows=604050 loops=1)
+                                      ->  Hash  (cost=114.93..114.93 rows=6693 width=4) (actual time=1.686..1.687 rows=6693 loops=1)
+                                            Buckets: 8192  Batches: 1  Memory Usage: 300kB
+                                            ->  Seq Scan on periodico  (cost=0.00..114.93 rows=6693 width=4) (actual time=0.008..0.803 rows=6693 loops=1)
+                                ->  Hash  (cost=700.02..700.02 rows=20202 width=17) (actual time=6.848..6.848 rows=20202 loops=1)
+                                      Buckets: 32768  Batches: 1  Memory Usage: 1281kB
+                                      ->  Seq Scan on recurso recurso_2  (cost=0.00..700.02 rows=20202 width=17) (actual time=0.006..3.434 rows=20202 loops=1)
+Planning Time: 1.131 ms
+Execution Time: 773.924 ms
+
+ENGARRAFAMENTOS QUERY 22:
+--Seq Scan em reserva, livro, ebook, periodico e recurso; 
+--Hash Join e Hash Aggregate a processar grandes volumes de dados;
+--Comentário: A query faz Merge Append e várias agregações e junções em grandes tabelas, tornando os Seq Scan e Hash Join os principais pontos lentos.
+
